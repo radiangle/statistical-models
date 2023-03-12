@@ -1,13 +1,14 @@
 ---
 title: "Part 1 - Multiple Regression"
 output:
-  pdf_document:
-    toc: yes
   html_document:
     toc: yes
     theme: united
+  pdf_document:
+    toc: yes
 date: '2023-03-12'
 ---
+Notes are adapted from Yu Zhao's DSC241 lab sessions at UCSD. 
 
 ```{r include=FALSE}
 # install.packages('alr4')
