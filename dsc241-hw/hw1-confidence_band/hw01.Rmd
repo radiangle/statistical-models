@@ -1,0 +1,110 @@
+---
+title: "HW01"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Students: Vivek Sharma - Quynh Le
+
+We've worked together in pair to do this homework.
+
+
+# Problem 1. 
+Write a function confBand(x, y, conf=0.95) taking in a predictor vector (x1; : : : ; xn) and a response vector y = (y1; : : : ; yn) and return a plot with the points (x1; y1); : : : ; (xn; yn), the least squares line, and the confidence band at level conf. Apply your function to hp and mpg from the 04cars dataset.
+
+```{r}
+library("ggplot2")
+```
+
+```{r}
+
+confBand <- function(x, y, conf = 0.95 ) {
+  data_f = data.frame(x = x, y = y)
+  model <- lm(y ~ x, data = data_f)
+  model_summary = summary(model)
+  p = model_summary$df[1]
+  n_minus_p  = model_summary$df[2]
+  F_val <- qf(conf, p, n_minus_p)
+  K   = sqrt(p*F_val)
+  OUT  = predict(model, newdata = data_f, se.fit = TRUE, interval = "confidence", level = conf)
+  y_h = OUT$fit[,1]
+  lb = y_h - K*OUT$se.fit
+  ub = y_h + K*OUT$se.fit
+  final_df = data.frame(lower_bound = lb, mean = y_h, upper_bound = ub, y = y, x = x)
+  beta_0 = model$coefficients[1]
+  beta_1 = model$coefficients[2]
+  pl = ggplot(data = final_df, aes(x = x, y = y)) +
+    geom_point() + 
+    geom_ribbon(data = final_df, aes(ymin = lower_bound, ymax = upper_bound), alpha = 0.2, fill = 'red') + 
+    geom_abline(slope = beta_1, intercept = beta_0, col = 'red')
+  return (pl)
+}
+```
+
+
+```{r}
+library(ggplot2)
+load("04cars.rda") # loads cars dataset"
+tmp = dat[,c(13,15,16,18,19)] # extract selected variables
+tmp = tmp[complete.cases(tmp),] # extracts complete cases
+tmp = as.data.frame(tmp)
+names(tmp) = c("hp","mpg","wt","len","wd") # abbreviate names
+
+dat = tmp
+hp = dat[,"hp"]
+mpg = dat[, "mpg"]
+data_f = data.frame(hp, mpg)
+data_f
+plt = confBand(x = data_f$hp, y = data_f$mpg, conf = 0.95)
+plt
+```
+
+# Problem 2. 
+Let n = 100 and draw x1; : : : ; xn iid Unif(0; 1), which stay fixed in what follows. Repeat the following experiment N = 1000 times.
+- Generate yi = 1 + xi + "i, with "i i.i.d. N(0; 0:2).
+- Compute the 99% confidence band and record whether it contains the true line, or not.
+Summarize the result of this numerical experiment by returning the proportion of times (out of N)
+that the confidence band contained the true line.
+
+```{r}
+
+# constants and initial params
+n <-100
+x <-  runif(n, min = 0, max = 1)
+N <- 1000
+mu <-  0; var <- 0.2; sd <- var**0.5 
+cnt <- 0
+cnt2 <- 0
+set.seed(42)
+
+
+for(i in 1:N){
+  e <-  rnorm(n, mu, sd) #generate epsilon ~ Normal(0, 0.2)
+  y_true = 1 + x  #True Line
+  y <-  1 + x + e 
+  lr <- lm(y ~ x)
+  
+  conf <-  confint(lr, level = 0.99)
+  upper  <-  ((conf[2,2]*x) + conf[1,2])
+  lower <-  ((conf[2,1]*x) + conf[1,1])
+  
+  # check whether the band contains true line
+  temp <- data.frame(cbind(y_true, lower, upper))
+  names(temp) <- c("y_true", "lower", "upper")
+  outliers <- subset(temp, y_true < lower | y_true > upper)
+  
+  
+  if (nrow(outliers) == 0){
+    cnt <- cnt + 1 
+  }
+  else {
+    cnt2 <- cnt2 + 1
+  }
+  
+}
+# returning proportion of times (out of N) that the confidence band contained the true line
+print(cnt/N)
+
+
+```

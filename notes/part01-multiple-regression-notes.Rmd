@@ -1,0 +1,141 @@
+---
+title: "Part 1 Notes"
+# output: html_document
+output:
+  html_document:
+    toc: true
+    theme: united
+date: '2023-03-12'
+
+
+---
+
+```{r include=FALSE}
+# install.packages('alr4')
+# install.packages('MASS')
+# install.packages('ellipse')
+library(alr4)
+library(car)
+library(MASS)
+library(ggplot2)
+library(ellipse)
+?Boston
+```
+
+# How to do hypothesis testing? 
+
+
+Consider the Boston data and the linear model: $medv = \beta_0 + \beta_1*crim + \beta_2*nox + \beta_3*rm + \beta_4*age + \beta_5*dis + \epsilon$
+```{r}
+lm.medv = lm(medv ~ crim + nox + rm + age + dis,data = Boston) 
+summary(lm.medv)
+```
+
+Test the hypothesis that the slope $\beta_1 = 0$, against the alternative that $\beta_1 < 0$.
+Intuitively, higher crime rates will lead to lower house price. We want to test whether this intuition is true or not. 
+$\beta_1$ is the coefficient of crime rate. We want to test whether $\beta_1 < 0$, which means when the level of crime rates goes up, the house price will go down. For example if $\beta_1 = -0.2$, it means that when the crime rate goes up by 1 unit, the house price will go down by 0.2 units.
+
+How to do that?  
+--> Calculate t ratio:  
+
+- By hand using formula  
+In general, we can test for linear combination of the coefficients. Indeed, if $\mathbf{c}=\left(c_0, c_1, \ldots, c_p\right) \in \mathbb{R}^{p+1}$, then
+$$
+\frac{\mathbf{c}^{\top} \widehat{\boldsymbol{\beta}}-\mathbf{c}^{\top} \boldsymbol{\beta}}{\widehat{\mathrm{SE}}\left(\mathbf{c}^{\top} \widehat{\boldsymbol{\beta}}\right)} \sim \mathcal{T}_{n-p-1}
+$$
+where
+$$
+\widehat{\mathrm{SE}}\left(\mathbf{c}^{\top} \widehat{\boldsymbol{\beta}}\right)=\widehat{\sigma} \sqrt{\mathbf{c}^{\top}\left(\mathbf{X}^{\top} \mathbf{X}\right)^{-1} \mathbf{c}}
+$$
+is the (estimated) standard error of $\mathbf{c}^{\top} \widehat{\boldsymbol{\beta}}$.
+
+- By using the summary function 
+
+```{r}
+tval <- (coef(lm.medv)[2] - 0)/ sqrt(vcov(lm.medv)[2,2]) # use second coef, which is crim
+df <- dim(Boston)[1] - 2
+data.frame(tval = tval, df=df, pval = 1 - pt(abs(tval), df))
+```
+
+The p-value is `r 1 - pt(abs(tval), df)` < 0.05. Therefore we reject the null hypothesis, the alternative hypothesis is true, which means higher crime rates do lead to lower house price.  
+
+
+# How to find a confidence interval?
+
+Alternatively, we can use `confint` to calculate confidence interval. 
+
+```{r}
+confint(lm.medv, "crim",level = 0.95)
+```
+We can also use confidence interval to test hypothesis. For example if we want to test wheter $\beta = 0$ with 95% confidence level, we can look at the 95% confidence level and see whether $\beta = 0$ is included in the interval. In this example, we can see that $\beta = 0$ is not included, so we reject the hypothesis.  
+
+If we want to test the hypothesis that $\beta_3 = \beta_4 = 0$, we can use F test.  
+We can:
+- calculate the F value by hand
+- use ANOVA 
+
+```{r}
+lm.medv.h0 = lm(medv ~ crim + nox + dis,data = Boston)  # if beta_3 = beta_4 = 0, we only have 3 predictors left
+anova(lm.medv.h0, lm.medv) # then we can compare the full model with the reduced model
+```
+
+
+The p-value is less than 0.05. We reject the null hypothesis, claiming at least one of the coefficient is not 0.
+
+# What is a confidence region? 
+When we have multiple coefficients, the confidence "interval" is no longer a 2d interval, it's an ellipsoid. How do we represent this? --> Confidence Region, which also follows the F distribution. 
+```{r}
+plot(ellipse(lm.medv,which = c(4,5),level = 0.95),type = 'l',col = 'darkred') #confidence region
+points(lm.medv$coefficients[4],lm.medv$coefficients[5],col = 'darkblue',pch = 18) #estimated value
+```
+
+
+# What does 95% confidence interval mean?
+
+The confidence level represents the long-run proportion of corresponding CIs that contain the true value of the parameter. For example, out of all intervals computed at the 95\% level, 95\% of them should contain the parameter's true value.
+
+If we repeat our experiment multiple times, 95% the confidence intervals contain the true value. The point is that the confidence interval is random, not the true value. 
+
+How do we validate this? Simulation
+
+```{r}
+B = 1000 # number of simulations
+beta0 = 1
+beta1 = 3
+n = 100 # sample size
+CI = data.frame(lower = rep(NA,B),upper = rep(NA,B),
+                contain_true_value = rep(NA,B))  
+              # create a data frame to store the lower bounds, upper bounds and indicator
+      
+
+for (i in 1:B) {
+  x = rnorm(n)
+  y = beta0 + beta1*x + 0.5*rnorm(n) # linear model with 1 predictor and added random residual errors
+  lm.sim = lm(y~x)
+  beta1_CI = confint(lm.sim, "x",level = 0.95)
+  CI$lower[i] = beta1_CI[1] #lower bound
+  CI$upper[i] = beta1_CI[2] #upper bound
+  CI$contain_true_value[i] = (beta1_CI[1] <= beta1 & beta1_CI[2] >= beta1) # indicator, if the true value is within the confidence interval, return TRUE
+}
+```
+
+```{r}
+cols = c('TRUE' = 'darkgreen','FALSE' = 'darkred')
+size = c('TRUE' = 0.5,'FALSE' = 1)
+ggplot(data = CI) + 
+  geom_errorbar(aes(x = 1:B,y = beta1,ymin=lower, ymax=upper,color = contain_true_value,size = contain_true_value)) +
+  geom_hline(yintercept = beta1) +
+  scale_color_manual(values = cols) + 
+  scale_size_manual(values = size) +
+  xlab('Number of experiments')
+```
+
+The green bars are the intervals that contain the true value. As we can see, sometimes, the confidence interval does not contain the true value, which is 3. 
+
+Validate coverage probability:
+
+```{r}
+sum(CI$contain_true_value)/B
+```
+
+This estimated coverage probability will coverge to 0.95 as $B \to \infty$.
