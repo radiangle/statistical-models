@@ -4,8 +4,6 @@ output:
   html_document:
     toc: yes
     theme: united
-  pdf_document:
-    toc: yes
 date: '2023-03-12'
 ---
 Notes are adapted from Yu Zhao's DSC241 lab sessions at UCSD. 
@@ -139,3 +137,41 @@ sum(CI$contain_true_value)/B
 ```
 
 This estimated coverage probability will coverge to 0.95 as $B \to \infty$.
+
+# What is a confidence band? Illustrate the confidence band using the 04cars dataset.
+Write a function confBand(x, y, conf=0.95) taking in a predictor vector (x1; ...; xn) and a response vector y = (y1; ... ; yn) and return a plot with the points (x1; y1); ... ; (xn; yn), the least squares line, and the confidence band at level conf. Apply the function to hp and mpg from the 04cars dataset.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+- Create the confBand function
+```{r}
+confBand =  function(x, y, conf = 0.95) {
+	fit = lm(y ~ x)
+	plot(x, y, pch = 16)
+	newx = seq(min(x), max(x), len = 100) 
+	model = predict(fit, newdata = data.frame(x = newx), 
+	                se.fit = TRUE) # predicted values and standard error of predicted means
+	pred = model$fit
+	pred.se = model$se.fit
+
+	n = length(x)
+	lower = pred - sqrt(2 * qf(conf, 2, n - 2)) * pred.se # lower bound of the confidence band
+	upper = pred + sqrt(2 * qf(conf, 2, n - 2)) * pred.se # upper bound of the confidence band
+
+	polygon(c(rev(newx), newx), c(rev(upper), lower), 
+	        col = rgb(0.75, 0.75, 0.75, 0.5), border = NA) # draw the confidence band
+	lines(newx, upper, lty = 'dashed', col = 'blue') 
+	lines(newx, lower, lty = 'dashed', col = 'blue')
+	lines(newx, pred, col = "red", lwd = 2)
+}
+```
+- Apply the confBand function to the 04cars.rda dataset
+```{r}
+load("datasets/04cars.rda") 
+dat = dat[, c(13,15)] # extract target columns hp and mpg
+dat = dat[complete.cases(dat), ] 
+names(dat) = c("hp", "mpg")
+with(dat, confBand(hp, mpg)) # call the function confBand in the data environment
+```
