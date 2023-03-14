@@ -1,0 +1,185 @@
+---
+title: "Part 3 - Condition number of a matrix - Splines & Polynomial Regression"
+output:
+  html_document:
+    toc: yes
+    theme: united
+date: '2023-03-14'
+---
+Notes are adapted from Yu Zhao's DSC241 lab sessions at UCSD. 
+```{r include=FALSE}
+library(splines)
+```
+
+
+We are interested in the following linear model:
+\begin{equation}
+y = X\beta + \epsilon
+\end{equation}
+
+- We aim to find the coefficient estimate $\hat{\beta}$, and $\hat{\beta}$ is affect by $\epsilon$.
+
+- The condition number of $X$ measures how much can a change in $\epsilon$ affect the
+solution $\hat{\beta}$.
+
+- If a matrix is singular, then its condition number is infinite. A finite large condition
+number means that the matrix is close to being singular.
+
+- A problem with a low condition number is said to be well-conditioned, while a problem with a high condition number is said to be ill-conditioned. 
+
+# How to find the Condition Number of a matrix?
+condition number = max singular value / min singular value --> Use SVD to calculate singular values
+
+
+```{r}
+X = matrix(c(3.2,-7.6,2.2,-5.2),nrow = 2)
+svd_X = svd(X)
+k_X = max(svd_X$d)/min(svd_X$d) 
+k_X
+```
+Check the sensitivity of the solution to changes in $y$
+```{r}
+beta = matrix(c(1,2),nrow = 2)
+y = X%*%beta
+solve(X, y)
+```
+
+
+```{r}
+solve(X, y + rnorm(2,0,0.5))
+```
+
+
+```{r}
+solve(X, y + rnorm(2,0,0.5))
+```
+
+```{r}
+solve(X, y + c(0,0.1))
+```
+As we can see, the solution changes dramatically even there is only a small change in $y$.
+
+How about the polynomial regression?
+
+```{r}
+n = 100
+p = 10
+x = runif(100)
+X = poly(x, degree = p, raw = TRUE)
+X = cbind(rep(1, n), X) # get a complete desgin matrix, add a column of one
+d = svd(X)$d  # svd outputs 3 matrices u v d --> we use d to extract the singular values
+
+# d is a vector containing the singular values of x, of length min(n, p), sorted decreasingly.
+
+max(d)/min(d) #condition number = max singular value / min singular value
+```
+The condition number here is `r max(d)/min(d)`, which is very large, which means the model is not stable.
+
+
+```{r}
+n = 100
+p = 2
+x = runif(100)
+X = poly(x, degree = p, raw = TRUE)
+X = cbind(rep(1, n), X) 
+d = svd(X)$d 
+max(d)/min(d) 
+```
+Here we check with smaller $p$ --> more stable, smaller cond number
+How small is small cond number? --> We can treat $p$ as a tuning parameter 
+
+# Why is the condition number important?
+
+Wikipedia: In numerical analysis, the condition number of a function measures how much the output value of the function can change for a small change in the input argument. This is used to measure how sensitive a function is to changes or errors in the input, and how much error in the output results from an error in the input. 
+
+# How to tune $p$? Given that changing $p$ also changes the stability of the model.
+
+We can use Hypothesis testing and anova to compare different model, each time we increase p, we add a column!
+
+```{r}
+load("datasets/04cars.rda")
+tmp = dat[,c(13,15,16,18,19)] 
+tmp = tmp[complete.cases(tmp),]
+tmp = as.data.frame(tmp)
+names(tmp) = c("hp", "mpg", "wt", "len", "wd")
+dat = tmp
+attach(dat)
+fit1 <- lm(mpg ~ wt + len + wd + hp,data = dat)
+fit2 <- lm(mpg ~ wt + len + wd + poly(hp, 2, raw = TRUE))
+fit3 <- lm(mpg ~ wt + len + wd + poly(hp, 3, raw = TRUE))
+fit4 <- lm(mpg ~ wt + len + wd + poly(hp, 4, raw = TRUE))
+fit5 <- lm(mpg ~ wt + len + wd + poly(hp, 5, raw = TRUE))
+fit6 <- lm(mpg ~ wt + len + wd + poly(hp, 6, raw = TRUE))
+fit7 <- lm(mpg ~ wt + len + wd + poly(hp, 7, raw = TRUE))
+anova(fit1,fit2,fit3,fit4,fit5,fit6,fit7)
+```
+
+As we can see here, p values are all small (p < 0.05) until we go from model 6 to model 7. So we might want to stop at the model 6. 
+
+How to interpret Pr(>F) in F test?
+
+m1: $y = x + \epsilon$
+m2: $y = x + x^2 + \epsilon$
+
+--> F test 
+p is small, reject null hypo (null hypo: adding column is not helpful) --> add one column is useful
+
+# What is Splines and how to use Splines?
+
+Consider data on a set of 892 females under 50 years collected in three villages in West Africa. We would like to explore the relationship between age (in years) and a crude measure of body fat, which is triceps skinfold thickness.
+ 
+
+```{r fig.height = 6, fig.width = 6}
+triceps <- read.csv('datasets/triceps.csv')
+plot(triceps$triceps~triceps$age)
+abline(lm(triceps~age,data = triceps),col = 'red',lwd = 3)
+
+```
+
+First try polynomial fit:
+
+```{r fig.height = 6, fig.width = 6,warning=FALSE}
+pts = seq(0,55,by = 0.1)
+plot(triceps$age, triceps$triceps, pch = 16)
+for (d in 1:5){
+	fit = lm(triceps ~ poly(age, d, raw = TRUE),data = triceps)
+	val = predict(fit, data.frame(age = pts))
+	lines(pts, val, col=rainbow(5)[d], lwd = 3)
+	}
+
+```
+# What is Spline?
+Spline Regression is one of the non-parametric regression technique. In this technique the dataset is divided into bins at intervals or points which we called as knots. Also this bin has its separate fit. 
+
+# How to do Spline?
+Spline of degree 2:
+```{r fig.height = 6, fig.width = 6,warning=FALSE}
+K = quantile(triceps$age, c(0.4,0.8), type=1)
+plot(triceps$age, triceps$triceps, pch = 16)
+fit = lm(triceps ~ bs(age,degree=2,knots=K),data = triceps)
+val = predict(fit, data.frame(age = pts))
+lines(pts, val, col="blue", lwd = 3)
+```
+
+Spline of degree 3:
+
+```{r fig.height = 6, fig.width = 6,warning=FALSE}
+K = quantile(triceps$age, c(0.4,0.8), type=1)
+plot(triceps$age, triceps$triceps, pch = 16)
+fit = lm(triceps ~ bs(age,degree=3,knots=K),data = triceps)
+val = predict(fit, data.frame(age = pts))
+lines(pts, val, col="blue", lwd = 3)
+```
+
+Spline of degree 4:
+
+```{r fig.height = 6, fig.width = 6,warning=FALSE}
+K = quantile(triceps$age, c(0.4,0.8), type=1)
+plot(triceps$age, triceps$triceps, pch = 16)
+fit = lm(triceps ~ bs(age,degree=4,knots=K),data = triceps)
+val = predict(fit, data.frame(age = pts))
+lines(pts, val, col="blue", lwd = 3)
+```
+
+
+As we can see here, the higher degree give more smaller "curves", which fit the polynomial regression in each bin. For example when `degree = 4`, there are 4 curves that fit the data in each bin. 
